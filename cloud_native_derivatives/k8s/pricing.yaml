@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: pricing, namespace: derivatives, labels: { app: pricing } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: pricing } }
+  template:
+    metadata:
+      labels: { app: pricing }
+      annotations: { prometheus.io/scrape: "true", prometheus.io/port: "8001", prometheus.io/path: /metrics }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 10001 }
+      containers:
+        - name: pricing
+          image: derivatives-pricing:latest      # push to your registry and change this
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8001 }]
+          envFrom: [{ configMapRef: { name: platform-config } }]
+          readinessProbe: { httpGet: { path: /health/ready, port: 8001 }, initialDelaySeconds: 3, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /health/live, port: 8001 }, initialDelaySeconds: 10, periodSeconds: 10 }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: pricing, namespace: derivatives }
+spec:
+  selector: { app: pricing }
+  ports: [{ port: 8001, targetPort: 8001 }]

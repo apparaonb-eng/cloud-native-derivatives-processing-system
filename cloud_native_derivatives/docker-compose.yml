@@ -1,0 +1,39 @@
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  marketdata:
+    build: { context: ., dockerfile: services/marketdata/Dockerfile }
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      SYMBOLS: "AAPL:185,ES:5200"
+      TICK_INTERVAL: "0.5"
+    ports: ["8002:8002"]
+    depends_on: { redis: { condition: service_healthy } }
+
+  pricing:
+    build: { context: ., dockerfile: services/pricing/Dockerfile }
+    ports: ["8001:8001"]
+    # scale out:  docker compose up --scale pricing=3   (remove the fixed port mapping first)
+
+  portfolio:
+    build: { context: ., dockerfile: services/portfolio/Dockerfile }
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      PRICING_URL: http://pricing:8001
+      MARKETDATA_URL: http://marketdata:8002
+    ports: ["8003:8003"]
+    depends_on:
+      redis: { condition: service_healthy }
+      pricing: { condition: service_started }
+      marketdata: { condition: service_started }
+
+volumes:
+  redis-data:

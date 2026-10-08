@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: portfolio, namespace: derivatives, labels: { app: portfolio } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: portfolio } }
+  template:
+    metadata:
+      labels: { app: portfolio }
+      annotations: { prometheus.io/scrape: "true", prometheus.io/port: "8003", prometheus.io/path: /metrics }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 10001 }
+      containers:
+        - name: portfolio
+          image: derivatives-portfolio:latest      # push to your registry and change this
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8003 }]
+          envFrom: [{ configMapRef: { name: platform-config } }]
+          readinessProbe: { httpGet: { path: /health/ready, port: 8003 }, initialDelaySeconds: 3, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /health/live, port: 8003 }, initialDelaySeconds: 10, periodSeconds: 10 }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: portfolio, namespace: derivatives }
+spec:
+  selector: { app: portfolio }
+  ports: [{ port: 8003, targetPort: 8003 }]
